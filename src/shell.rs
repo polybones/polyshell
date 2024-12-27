@@ -1,6 +1,7 @@
 use std::io::{stdin, stdout, Write};
 
 use anyhow::Result;
+use bumpalo::Bump;
 use termion::clear;
 use termion::cursor::{self, DetectCursorPos};
 use termion::event::Key;
@@ -8,10 +9,12 @@ use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::scroll;
 use termion::terminal_size;
-use crate::{lang::lexer, proc};
+
+use crate::lang::{lexer, parser};
 
 #[inline(always)]
 pub fn repl() -> Result<()> {
+    let bump: Bump = Bump::new();
     let stdin = stdin();
     let mut stdout = stdout()
         .lock()
@@ -37,10 +40,12 @@ pub fn repl() -> Result<()> {
                 stdout.flush()?;
                 
                 stdout.suspend_raw_mode()?;
-                // TODO internal & external commands executed by eval
-                // proc::exec_external(&buffer);
-                let mut lexer = lexer::Lexer::new(&buffer);
-                println!("{:#?}", lexer.get_tokens());
+                
+                let tokens = lexer::Lexer::new(&buffer).tokenize();
+                let nodes = parser::parse(&bump, tokens);
+                println!("{:#?}", nodes);
+                // process::exec_external(&buffer);
+                
                 stdout.activate_raw_mode()?;
                 buffer.clear();
 

@@ -1,12 +1,16 @@
 mod lang;
-mod proc;
-mod read;
+mod process;
+mod shell;
 
 use anyhow::Result;
+use bumpalo::Bump;
 
 fn main() -> Result<()> {
-    // let mut lexer = lang::lexer::Lexer::new(&stress_test);
-    // println!("{:#?}", lexer.get_tokens());
-    // Ok(())
-    read::repl()
+    let bump: Bump = Bump::new();
+    let tks = lang::lexer::Lexer::new("/bin/echo hello;/bin/echo \"world!\"").tokenize();
+    let ast = lang::parser::parse(&bump, tks);
+    let mut ctx = lang::evaluator::Context::default();
+    lang::evaluator::eval_program(ast, &mut ctx);
+    Ok(())
+    // shell::repl()
 }

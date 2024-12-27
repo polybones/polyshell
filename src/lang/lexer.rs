@@ -1,22 +1,43 @@
 use std::str::Chars;
 
+use string_cache::DefaultAtom as Atom;
+
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub offset: usize,
-    pub size: usize,
+    pub value: TokenValue,
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        Self {
+            kind: TokenKind::Identifier,
+            value: TokenValue::None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
     Assignment,
+    Identifier,
+    Str,
+    Wildcard,
+    EndStatement,
     Eof,
 }
 
-// Adapted from https://oxc-project.github.io/javascript-parser-in-rust/docs/lexer
+#[derive(Debug)]
+pub enum TokenValue {
+    None,
+    // Number(f64),
+    String(Atom),
+}
+
 pub struct Lexer<'a> {
     source: &'a str,
     chars: Chars<'a>,
+    cursor: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -24,49 +45,102 @@ impl<'a> Lexer<'a> {
         Self {
             source,
             chars: source.chars(),
+            cursor: 0,
         }
     }
 
-    pub fn get_tokens(&mut self) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
-        loop {
-            let tk = self.next_token();
-            if tk.kind == TokenKind::Eof {
-                break
-            }
-            tokens.push(tk);
+        while !self.is_eof() {
+            tokens.push(self.next_token());
         }
         tokens
     }
 
-    fn next_kind(&mut self) -> TokenKind {
+    fn next_token(&mut self) -> Token {
+        self.cursor = self.offset();
+        let (kind, value) = self.next_kind();
+        Token {
+            kind,
+            value,
+        }
+    }
+
+    fn next_kind(&mut self) -> (TokenKind, TokenValue) {
         while let Some(ch) = self.chars.next() {
+            // println!("scan {ch} : cursor {}", self.cursor);
             match ch {
+                ';' | '\n' => return (TokenKind::EndStatement, TokenValue::None),
+                '*' => return (TokenKind::Wildcard, TokenValue::None),
                 ':' if self.peek() == Some('=') => {
                     self.chars.next();
-                    return TokenKind::Assignment;
+                    return (TokenKind::Assignment, TokenValue::None);
                 },
+                // Str
                 '"' => {
-                    loop {}
+                    self.chars.next();
+                    loop {
+                        match self.peek() {
+                            Some('\n') => {
+                                panic!("lexer error: newlines are not allowed in strings");
+                            },
+                            Some('"') => {
+                                self.chars.next();
+                                break
+                            },
+                            None => {
+                                panic!("lexer error: string bug, need to fix.")
+                            },
+                            _ => {
+                                self.chars.next();
+                            },
+                        }
+                    }
+                    let slice = &self.source[self.cursor+1..self.offset()-1];
+                    return (
+                        TokenKind::Str,
+                        TokenValue::String(Atom::from(slice)),
+                    );
                 },
-                _ => {},
+                // Identifier
+                ch if ch.is_ascii_alphabetic() || ch == '/' => {
+                    while let Some(ch) = self.peek() {
+                        if ch.is_ascii_alphanumeric() || ch == '/' {
+                            self.chars.next();
+                        }
+                        else {
+                            break
+                        }
+                    }
+                    let slice = &self.source[self.cursor..self.offset()];
+                    return (
+                        TokenKind::Identifier,
+                        TokenValue::String(Atom::from(slice)),
+                    );
+                },
+                ch if ch.is_whitespace() => {
+                    if self.cursor + 1 != self.chars.as_str().len() {
+                        self.cursor += 1;
+                    }
+                },
+                _ => panic!("lexer error: unknown token \"{}\"", ch),
             }
         }
-        TokenKind::Eof
+        (TokenKind::Eof, TokenValue::None)
     }
 
-    fn next_token(&mut self) -> Token {
-        let offset = self.offset();
-        let kind = self.next_kind();
-        let size = self.offset();
-        Token { kind, offset, size, }
+    #[inline]
+    fn offset(&mut self) -> usize {
+        self.source.len() - self.chars.as_str().len()
     }
 
+    #[inline]
     fn peek(&self) -> Option<char> {
         self.chars.clone().next()
     }
 
-    fn offset(&self) -> usize {
-        self.source.len() - self.chars.as_str().len()
+    #[inline]
+    fn is_eof(&mut self) -> bool {
+        self.chars.as_str().len() == 0
     }
 }

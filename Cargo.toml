@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.94"
+bumpalo = { version = "3.16.0", features = ["boxed", "collections"] }
 libc = "0.2.169"
+string_cache = "0.8.7"
 termion = "4.0.3"
