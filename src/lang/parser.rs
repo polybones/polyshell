@@ -18,6 +18,8 @@ pub enum Node<'a> {
     Assignment(Box<'a, AssignmentNode<'a>>),
     Command(Box<'a, CommandNode<'a>>),
     Str(Box<'a, StrNode>),
+    Alias(Box<'a, AssignmentNode<'a>>),
+    End,
     Null,
 }
 
@@ -29,7 +31,7 @@ pub struct AssignmentNode<'a> {
 
 #[derive(Debug)]
 pub struct CommandNode<'a> {
-    pub command: Node<'a>,
+    pub command: StrNode,
     pub args: BumpVec<'a, Node<'a>>,
 }
 
@@ -55,15 +57,25 @@ pub fn parse<'a>(bump: &'a Bump, tokens: Vec<Token>) -> Program<'a> {
 
 fn parse_node<'a>(bump: &'a Bump, token: Token, iter: &mut Peekable<IntoIter<Token>>) -> Node<'a> {
     match token.kind {
+        TokenKind::EndStatement => return Node::End,
         TokenKind::Identifier | TokenKind::Str => {
             let atom = match token.value {
                 TokenValue::String(str) => str,
-                _ => {
-                    // SAFETY: Always has TokenValue::String
-                    unreachable!()
-                }
+                // SAFETY: Always has TokenValue::String
+                _ => unreachable!(),
             };
-            let node = Node::Str(Box::new_in(StrNode { atom }, bump));
+            match &atom as &str {
+                "alias" => {
+                    return Node::Alias(Box::new_in(
+                        AssignmentNode {
+                            lhs: Node::Str(Box::new_in(StrNode { atom }, bump)),
+                            rhs: parse_node(bump, iter.next().unwrap(), iter),
+                        },
+                        bump,
+                    ));
+                },
+                _ => {},
+            };
             if let Some(tk) = iter.peek() {
                 match tk.kind {
                     TokenKind::Assignment => {
@@ -71,7 +83,7 @@ fn parse_node<'a>(bump: &'a Bump, token: Token, iter: &mut Peekable<IntoIter<Tok
                         if iter.peek().is_some() {
                             return Node::Assignment(Box::new_in(
                                 AssignmentNode {
-                                    lhs: node,
+                                    lhs: Node::Str(Box::new_in(StrNode { atom }, bump)),
                                     // SAFETY: iter.next() is Some(...)
                                     rhs: parse_node(bump, iter.next().unwrap(), iter),
                                 },
@@ -108,17 +120,16 @@ fn parse_node<'a>(bump: &'a Bump, token: Token, iter: &mut Peekable<IntoIter<Tok
                                 None => break,
                             }
                         }
-                        // println!("ARRRRRGHHH {:#?}", args);
                         return Node::Command(Box::new_in(
                             CommandNode {
-                                command: node,
+                                command: StrNode { atom },
                                 args,
                             }, bump));
                     },
                     _ => {},
                 }
             }
-            node
+            return Node::Str(Box::new_in(StrNode { atom }, bump));
         }
         _ => Node::Null,
     }

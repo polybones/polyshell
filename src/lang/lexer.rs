@@ -22,7 +22,6 @@ pub enum TokenKind {
     Assignment,
     Identifier,
     Str,
-    Wildcard,
     EndStatement,
     Eof,
 }
@@ -68,11 +67,9 @@ impl<'a> Lexer<'a> {
 
     fn next_kind(&mut self) -> (TokenKind, TokenValue) {
         while let Some(ch) = self.chars.next() {
-            // println!("scan {ch} : cursor {}", self.cursor);
             match ch {
                 ';' | '\n' => return (TokenKind::EndStatement, TokenValue::None),
-                '*' => return (TokenKind::Wildcard, TokenValue::None),
-                ':' if self.peek() == Some('=') => {
+                '=' => {
                     self.chars.next();
                     return (TokenKind::Assignment, TokenValue::None);
                 },
@@ -103,9 +100,9 @@ impl<'a> Lexer<'a> {
                     );
                 },
                 // Identifier
-                ch if ch.is_ascii_alphabetic() || ch == '/' => {
+                ch if ch.is_ascii_alphabetic() || is_str_acceptable(ch) => {
                     while let Some(ch) = self.peek() {
-                        if ch.is_ascii_alphanumeric() || ch == '/' {
+                        if ch.is_ascii_alphanumeric() || is_str_acceptable(ch) {
                             self.chars.next();
                         }
                         else {
@@ -143,4 +140,9 @@ impl<'a> Lexer<'a> {
     fn is_eof(&mut self) -> bool {
         self.chars.as_str().len() == 0
     }
+}
+
+#[inline]
+fn is_str_acceptable(ch: char) -> bool {
+    ch == '/' || ch == ':'
 }
