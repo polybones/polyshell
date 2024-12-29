@@ -10,12 +10,12 @@ use termion::raw::IntoRawMode;
 use termion::scroll;
 use termion::terminal_size;
 
-use crate::lang;
+use crate::lang::*;
 
 #[inline(always)]
 pub fn repl() -> Result<()> {
     let bump: Bump = Bump::new();
-    let mut ctx = lang::evaluator::Context::default();
+    let mut ctx = evaluator::Context::default();
     let stdin = stdin();
     let mut stdout = stdout()
         .lock()
@@ -41,18 +41,22 @@ pub fn repl() -> Result<()> {
                 stdout.flush()?;
 
                 stdout.suspend_raw_mode()?;
-                
                 if !buffer.is_empty() {
-                    let tks = lang::lexer::Lexer::new(&buffer).tokenize();
-                    let ast = lang::parser::parse(&bump, tks);
-                    lang::evaluator::eval_program(ast, &mut ctx);
+                    let res: Result<()> = (|| {
+                        let tks = lexer::Lexer::new(&buffer).tokenize()?;
+                        let ast = parser::parse(&bump, tks)?;
+                        evaluator::eval_program(ast, &mut ctx)?;
+                        Ok(())
+                    })();
+                    if let Err(err) = res {
+                        println!("polyshell: {err}");
+                    }
                 }
-                
                 stdout.activate_raw_mode()?;
 
                 // Reset cursor position
                 let new_pos = stdout.cursor_pos()?;
-                if new_pos.1 == cursor_pos.1+1 && !buffer.is_empty() {
+                if new_pos.0 > 1 {
                     // Handle 'partial lines'
                     write!(stdout, "{}", cursor::Goto(1, new_pos.1+1))?;
                 }

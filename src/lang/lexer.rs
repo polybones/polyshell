@@ -1,5 +1,6 @@
 use std::str::Chars;
 
+use anyhow::Result;
 use string_cache::DefaultAtom as Atom;
 
 #[derive(Debug)]
@@ -48,30 +49,30 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> Result<Vec<Token>> {
         let mut tokens = Vec::new();
         while !self.is_eof() {
-            tokens.push(self.next_token());
+            tokens.push(self.next_token()?);
         }
-        tokens
+        Ok(tokens)
     }
 
-    fn next_token(&mut self) -> Token {
+    fn next_token(&mut self) -> Result<Token> {
         self.cursor = self.offset();
-        let (kind, value) = self.next_kind();
-        Token {
+        let (kind, value) = self.next_kind()?;
+        Ok(Token {
             kind,
             value,
-        }
+        })
     }
 
-    fn next_kind(&mut self) -> (TokenKind, TokenValue) {
+    fn next_kind(&mut self) -> Result<(TokenKind, TokenValue)> {
         while let Some(ch) = self.chars.next() {
             match ch {
-                ';' | '\n' => return (TokenKind::EndStatement, TokenValue::None),
+                ';' | '\n' => return Ok((TokenKind::EndStatement, TokenValue::None)),
                 '=' => {
                     self.chars.next();
-                    return (TokenKind::Assignment, TokenValue::None);
+                    return Ok((TokenKind::Assignment, TokenValue::None));
                 },
                 // Str
                 '"' => {
@@ -94,15 +95,16 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     let slice = &self.source[self.cursor+1..self.offset()-1];
-                    return (
+                    return Ok((
                         TokenKind::Str,
                         TokenValue::String(Atom::from(slice)),
-                    );
+                    ));
                 },
                 // Identifier
                 ch if ch.is_ascii_alphabetic() || is_str_acceptable(ch) => {
                     while let Some(ch) = self.peek() {
-                        if ch.is_ascii_alphanumeric() || is_str_acceptable(ch) {
+                        // if ch.is_ascii_alphanumeric() || is_str_acceptable(ch) {
+                        if ch != '\n' && !ch.is_whitespace() {
                             self.chars.next();
                         }
                         else {
@@ -110,10 +112,10 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     let slice = &self.source[self.cursor..self.offset()];
-                    return (
+                    return Ok((
                         TokenKind::Identifier,
                         TokenValue::String(Atom::from(slice)),
-                    );
+                    ));
                 },
                 ch if ch.is_whitespace() => {
                     if self.cursor + 1 != self.chars.as_str().len() {
@@ -123,7 +125,7 @@ impl<'a> Lexer<'a> {
                 _ => panic!("lexer error: unknown token \"{}\"", ch),
             }
         }
-        (TokenKind::Eof, TokenValue::None)
+        Ok((TokenKind::Eof, TokenValue::None))
     }
 
     #[inline]

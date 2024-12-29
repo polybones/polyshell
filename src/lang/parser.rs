@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
+use anyhow::{anyhow, Result};
 use bumpalo::boxed::Box;
 use bumpalo::collections::Vec as BumpVec;
 use bumpalo::Bump;
@@ -20,12 +21,11 @@ pub enum Node<'a> {
     Str(Box<'a, StrNode>),
     Alias(Box<'a, AssignmentNode<'a>>),
     End,
-    Null,
 }
 
 #[derive(Debug)]
 pub struct AssignmentNode<'a> {
-    pub lhs: Node<'a>,
+    pub lhs: StrNode,
     pub rhs: Node<'a>,
 }
 
@@ -41,23 +41,24 @@ pub struct StrNode {
 }
 
 #[inline]
-pub fn parse<'a>(bump: &'a Bump, tokens: Vec<Token>) -> Program<'a> {
+pub fn parse<'a>(bump: &'a Bump, tokens: Vec<Token>) -> Result<Program<'a>> {
     let mut program = Program {
         body: BumpVec::new_in(bump),
     };
     let mut iter = tokens.into_iter().peekable();
     while let Some(tk) = iter.next() {
-        match parse_node(bump, tk, &mut iter) {
-            Node::Null => {},
-            node => program.body.push(node),
-        }
+        program.body.push(parse_node(bump, tk, &mut iter)?);
     }
-    program
+    Ok(program)
 }
 
-fn parse_node<'a>(bump: &'a Bump, token: Token, iter: &mut Peekable<IntoIter<Token>>) -> Node<'a> {
+fn parse_node<'a>(
+    bump: &'a Bump,
+    token: Token,
+    iter: &mut Peekable<IntoIter<Token>>,
+) -> Result<Node<'a>> {
     match token.kind {
-        TokenKind::EndStatement => return Node::End,
+        TokenKind::EndStatement => return Ok(Node::End),
         TokenKind::Identifier | TokenKind::Str => {
             let atom = match token.value {
                 TokenValue::String(str) => str,
@@ -66,71 +67,85 @@ fn parse_node<'a>(bump: &'a Bump, token: Token, iter: &mut Peekable<IntoIter<Tok
             };
             match &atom as &str {
                 "alias" => {
-                    return Node::Alias(Box::new_in(
-                        AssignmentNode {
-                            lhs: Node::Str(Box::new_in(StrNode { atom }, bump)),
-                            rhs: parse_node(bump, iter.next().unwrap(), iter),
-                        },
-                        bump,
-                    ));
-                },
-                _ => {},
+                    if let Some(rhs) = iter.next() {
+                        return Ok(Node::Alias(Box::new_in(
+                            AssignmentNode {
+                                lhs: StrNode { atom },
+                                rhs: parse_node(bump, rhs, iter)?,
+                            },
+                            bump,
+                        )));
+                    } else {
+                        return Err(anyhow!("incomplete 'alias' assignment"));
+                    }
+                }
+                _ => {}
             };
             if let Some(tk) = iter.peek() {
                 match tk.kind {
                     TokenKind::Assignment => {
                         iter.next();
                         if iter.peek().is_some() {
-                            return Node::Assignment(Box::new_in(
+                            return Ok(Node::Assignment(Box::new_in(
                                 AssignmentNode {
-                                    lhs: Node::Str(Box::new_in(StrNode { atom }, bump)),
+                                    lhs: StrNode { atom },
                                     // SAFETY: iter.next() is Some(...)
-                                    rhs: parse_node(bump, iter.next().unwrap(), iter),
+                                    rhs: parse_node(bump, iter.next().unwrap(), iter)?,
                                 },
                                 bump,
-                            ));
+                            )));
                         }
-                    },
+                    }
                     // TODO: add number support for lexer, parser
                     TokenKind::Identifier | TokenKind::Str => {
                         let mut args: BumpVec<Node<'a>> = BumpVec::new_in(bump);
                         let next_tk = iter.next().unwrap();
                         match next_tk.kind {
                             TokenKind::Identifier | TokenKind::Str => {
-                                args.push(Node::Str(Box::new_in(StrNode { atom:
-                                    match next_tk.value {
-                                        TokenValue::String(str) => str,
-                                        _ => unreachable!(),
-                                    }}, bump)));
-                            },
+                                args.push(Node::Str(Box::new_in(
+                                    StrNode {
+                                        atom: match next_tk.value {
+                                            TokenValue::String(str) => str,
+                                            _ => unreachable!(),
+                                        },
+                                    },
+                                    bump,
+                                )));
+                            }
                             _ => unreachable!(),
                         }
                         loop {
                             match iter.peek() {
                                 Some(ltk) => match ltk.kind {
                                     TokenKind::Identifier | TokenKind::Str => {
-                                        args.push(Node::Str(Box::new_in(StrNode { atom:
-                                            match iter.next().unwrap().value {
-                                                TokenValue::String(s) => s,
-                                                _ => unreachable!(),
-                                            }}, bump)));
+                                        args.push(Node::Str(Box::new_in(
+                                            StrNode {
+                                                atom: match iter.next().unwrap().value {
+                                                    TokenValue::String(s) => s,
+                                                    _ => unreachable!(),
+                                                },
+                                            },
+                                            bump,
+                                        )));
                                     }
                                     _ => break,
                                 },
                                 None => break,
                             }
                         }
-                        return Node::Command(Box::new_in(
+                        return Ok(Node::Command(Box::new_in(
                             CommandNode {
                                 command: StrNode { atom },
                                 args,
-                            }, bump));
-                    },
-                    _ => {},
+                            },
+                            bump,
+                        )));
+                    }
+                    _ => {}
                 }
             }
-            return Node::Str(Box::new_in(StrNode { atom }, bump));
+            return Ok(Node::Str(Box::new_in(StrNode { atom }, bump)));
         }
-        _ => Node::Null,
+        _ => unreachable!(),
     }
 }

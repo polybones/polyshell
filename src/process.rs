@@ -1,15 +1,17 @@
-use std::{env, iter};
+use std::env;
 use std::ffi::CString;
+use std::iter;
+use std::mem;
 use std::ptr;
 
-use libc::{c_char, execve, fork, wait};
+use anyhow::{anyhow, Result};
+use libc::{c_char, execve, fork, sigaction, sigemptyset, sigset_t, wait, SIG_DFL, SIGINT, SIGQUIT};
 
-pub fn exec_external(path: &str, args: Vec<CString>) -> i32 {
+pub fn exec_external(path: &str, args: Vec<CString>) -> Result<()> {
     let cmd = CString::new(path).unwrap();
     
     let argv: Vec<*const c_char> = iter::once(cmd.as_ptr())
         .chain(args.iter().map(|cs| cs.as_ptr()))
-        .chain(iter::once(ptr::null()))
         .chain(iter::once(ptr::null()))
         .collect();
     // SAFETY: Create owned CStrings
@@ -22,18 +24,43 @@ pub fn exec_external(path: &str, args: Vec<CString>) -> i32 {
         .collect();
     
     match unsafe { fork() } {
-        -1 => -1,
         0 => {
-            unsafe {
-                return execve(cmd.as_ptr(), argv.as_ptr(), env_vars.as_ptr());
+            let mut set: sigset_t = unsafe { mem::zeroed() };
+            unsafe { sigemptyset(&mut set) };
+
+            let mut action: sigaction = unsafe { mem::zeroed() };
+            action.sa_sigaction = SIG_DFL;
+            action.sa_mask = set;       
+            action.sa_flags = 0;        
+            let signals = [
+                SIGINT,
+                SIGQUIT,
+            ];
+
+            for &sig in signals.iter() {
+                if unsafe { sigaction(sig, &action, std::ptr::null_mut()) } != 0 {
+                    return Err(anyhow!("failed to set up signal handler for signal {}", sig).into());
+                }
+            }
+            let status_code = unsafe { execve(cmd.as_ptr(), argv.as_ptr(), env_vars.as_ptr()) };
+            if status_code == 0 {
+                return Ok(());
+            }
+            else {
+                return Err(anyhow!("status code {status_code}"));
             }
         },
         _ => {
-            let mut status = 0;
+            let mut status_code = 0;
             unsafe {
-                wait(&mut status);
+                wait(&mut status_code);
             }
-            status
+            if status_code == 0 {
+                return Ok(());
+            }
+            else {
+                return Err(anyhow!("status code {status_code}"));
+            }
         },
     }
 }
