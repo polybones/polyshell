@@ -144,5 +144,5 @@ impl<'a> Lexer<'a> {
 
 #[inline]
 fn is_str_acceptable(ch: char) -> bool {
-    ch == '/' || ch == ':'
+    ch == '/' || ch == ':' || ch == '-' || ch == '='
 }

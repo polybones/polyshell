@@ -10,11 +10,12 @@ use termion::raw::IntoRawMode;
 use termion::scroll;
 use termion::terminal_size;
 
-use crate::lang::{lexer, parser};
+use crate::lang;
 
 #[inline(always)]
 pub fn repl() -> Result<()> {
     let bump: Bump = Bump::new();
+    let mut ctx = lang::evaluator::Context::default();
     let stdin = stdin();
     let mut stdout = stdout()
         .lock()
@@ -38,20 +39,27 @@ pub fn repl() -> Result<()> {
                     write!(stdout, "{}", cursor::Down(1))?;
                 }
                 stdout.flush()?;
-                
+
                 stdout.suspend_raw_mode()?;
                 
-                let tokens = lexer::Lexer::new(&buffer).tokenize();
-                let nodes = parser::parse(&bump, tokens);
-                println!("{:#?}", nodes);
-                // process::exec_external(&buffer);
+                if !buffer.is_empty() {
+                    let tks = lang::lexer::Lexer::new(&buffer).tokenize();
+                    let ast = lang::parser::parse(&bump, tks);
+                    lang::evaluator::eval_program(ast, &mut ctx);
+                }
                 
                 stdout.activate_raw_mode()?;
-                buffer.clear();
 
                 // Reset cursor position
-                let cursor_pos = stdout.cursor_pos()?;
-                write!(stdout, "{}", cursor::Goto(1, cursor_pos.1))?;
+                let new_pos = stdout.cursor_pos()?;
+                if new_pos.1 == cursor_pos.1+1 && !buffer.is_empty() {
+                    // Handle 'partial lines'
+                    write!(stdout, "{}", cursor::Goto(1, new_pos.1+1))?;
+                }
+                else {
+                    write!(stdout, "{}", cursor::Goto(1, new_pos.1))?;
+                }
+                buffer.clear();
                 stdout.flush()?;
             },
             Key::Char(c) => {

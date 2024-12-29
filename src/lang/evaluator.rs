@@ -111,5 +111,12 @@ fn compute_command<'ctx>(node: Node<'ctx>, ctx: &mut Context<'ctx>) {
         if let Some(ex) = executable {
             process::exec_external(ex.to_str().unwrap(), argv);
         }
+        else {
+            // TODO: add better system for builtin commands/args maybe
+            match command {
+                "exit" => std::process::exit(0),
+                _ => println!("polyshell: command \"{command}\" not found"),
+            }
+        }
     }
 }
