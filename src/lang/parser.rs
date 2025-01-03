@@ -59,7 +59,7 @@ fn parse_node<'a>(
 ) -> Result<Node<'a>> {
     match token.kind {
         TokenKind::EndStatement => return Ok(Node::End),
-        TokenKind::Identifier | TokenKind::Str => {
+        TokenKind::Str => {
             let atom = match token.value {
                 TokenValue::String(str) => str,
                 // SAFETY: Always has TokenValue::String
@@ -97,11 +97,11 @@ fn parse_node<'a>(
                         }
                     }
                     // TODO: add number support for lexer, parser
-                    TokenKind::Identifier | TokenKind::Str => {
+                    TokenKind::Str => {
                         let mut args: BumpVec<Node<'a>> = BumpVec::new_in(bump);
                         let next_tk = iter.next().unwrap();
                         match next_tk.kind {
-                            TokenKind::Identifier | TokenKind::Str => {
+                            TokenKind::Str => {
                                 args.push(Node::Str(Box::new_in(
                                     StrNode {
                                         atom: match next_tk.value {
@@ -117,7 +117,7 @@ fn parse_node<'a>(
                         loop {
                             match iter.peek() {
                                 Some(ltk) => match ltk.kind {
-                                    TokenKind::Identifier | TokenKind::Str => {
+                                    TokenKind::Str => {
                                         args.push(Node::Str(Box::new_in(
                                             StrNode {
                                                 atom: match iter.next().unwrap().value {
@@ -146,6 +146,7 @@ fn parse_node<'a>(
             }
             return Ok(Node::Str(Box::new_in(StrNode { atom }, bump)));
         }
-        _ => unreachable!(),
+        TokenKind::Eof => return Ok(Node::End),
+        _ => Err(anyhow!("error processing token {:?}", token.kind)),
     }
 }
