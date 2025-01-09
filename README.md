@@ -1,2 +1,2 @@
 # polyshell
-An idiosyncratic shell
+An idiosyncratic linux shell
