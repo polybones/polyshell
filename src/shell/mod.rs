@@ -21,6 +21,7 @@ pub struct Shell {
 pub fn run(source: &str, shell: &mut Shell) -> Result<()> {
     let mut lx = lexer::Lexer::new(source);
     let tks = lx.tokenize()?;
+    // panic!("{tks:#?}");
     let mut parser = parser::Parser::new(source, tks);
     let exprs = parser.parse()?;
     eval::eval(exprs, shell)?;

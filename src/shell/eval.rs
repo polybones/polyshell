@@ -21,22 +21,18 @@ pub fn eval(exprs: Vec<Expr>, shell: &mut Shell) -> Result<()> {
                 },
             },
             Expr::Command(expr) => {
-                // TODO: add 'background commands'
+                // TODO: add background commands
                 match expr.command.as_ref() {
                     "exit" => {
                         std::process::exit(0);
                     },
                     _ => {
+                        let raw_cmd = shell.aliases.get(&expr.command).unwrap_or(&expr.command);
                         let command = if expr.canonical {
-                            shell.path_table.paths.get(&expr.command)
-                                .ok_or(anyhow!(
-                                    "command '{}' not found",
-                                    expr.command,
-                                ))
-                        }
-                        else {
-                            Ok(&expr.command)
-                        }?;
+                            shell.path_table.paths.get(raw_cmd)
+                        } else {
+                            Some(raw_cmd)
+                        }.ok_or(anyhow!("command '{}' not found", raw_cmd))?;
                         exec_external(
                             CString::new(command.as_ref()).unwrap(),
                             expr.args

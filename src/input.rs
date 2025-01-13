@@ -10,6 +10,7 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use termion::{style, terminal_size};
 use crate::shell::{self, Shell};
 
+// TEMP: temporary shell prompt
 const DEFAULT_PROMPT: &'static str = "~> ";
 
 pub struct Reader<'a> {
@@ -47,7 +48,7 @@ impl<'a> Reader<'a> {
                             self.term.suspend_raw_mode().ok();
                             print!("\r\n");
                             if let Err(err) = shell::run(&self.buffer, &mut self.shell) {
-                                print!("polyshell: {err}\n");
+                                write!(self.term, "polyshell: {err}\n")?;
                             }
                             self.buffer.clear();
                             self.cursor = 0;

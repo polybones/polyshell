@@ -61,7 +61,7 @@ impl<'a> Parser<'a> {
                         if lhs.kind != Kind::StringLiteral {
                             return Err(anyhow!("expected 'StringLiteral' after '{:?}'", modifier));
                         }
-                        if self.next_token().unwrap().kind == Kind::Eq {
+                        if self.next_token().unwrap().kind != Kind::Eq {
                             return Err(anyhow!("expected '=' after '{}'", self.token_value(&lhs)));
                         }
 

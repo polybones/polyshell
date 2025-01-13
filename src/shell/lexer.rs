@@ -66,41 +66,36 @@ impl<'a> Lexer<'a> {
                 // Quoted strings
                 '"' => {
                     self.cursor += 1;
-                    debug_assert!(!self.eof());
                     let start = self.cursor;
-                    while let Some(c) = self.peek() {
-                        match c {
-                            '"' => {
-                                break
-                            },
-                            '\\' => {
-                                self.cursor += 1;
-                                if self.peek() == Some('"') {
-                                    self.advance();
-                                    self.cursor += 1;
-                                }
-                                self.advance();
-                            },
-                            '\n' => return Err(anyhow!("newlines are forbidden in strings")),
-                            _ => {
+                    loop {
+                        match self.peek() {
+                            Some('"') => {
+                                let end = self.cursor;
+                                // skip past closing quotation
                                 self.cursor += 1;
                                 self.advance();
+                                return Ok(Token {
+                                    kind: Kind::StringLiteral,
+                                    start,
+                                    end,
+                                });
                             },
+                            Some(_) => {
+                                self.cursor += 1;
+                                self.advance();
+                            },
+                            None => return Err(anyhow!(
+                                "unclosed string delimeter; expected '\"'"
+                            )),
                         }
                     }
-                    self.cursor += 1;
-                    return Ok(Token {
-                        kind: Kind::StringLiteral,
-                        start,
-                        end: self.cursor,
-                    });
                 },
-                // Handle unquoted strings
+                // Unquoted string literals
                 ch if !ch.is_ascii_whitespace() => {
                     let start = self.cursor;
                     self.cursor += 1;
                     while let Some(c) = self.peek() {
-                        if c == ' ' || c == '\n' || c == ';' {
+                        if c == ' ' || c == '\n' || c == ';' || c == '=' {
                             break
                         }
                         else {
