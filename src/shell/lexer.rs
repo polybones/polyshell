@@ -32,6 +32,7 @@ impl<'a> Lexer<'a> {
     fn next_tk(&mut self) -> Result<Token> {
         while let Some(ch) = self.advance() {
             match ch {
+                // EndStatement
                 ';' => {
                     let start = self.cursor;
                     self.cursor += 1;
@@ -62,6 +63,7 @@ impl<'a> Lexer<'a> {
                         });
                     }
                 },
+                // Quoted strings
                 '"' => {
                     self.cursor += 1;
                     debug_assert!(!self.eof());
@@ -117,7 +119,7 @@ impl<'a> Lexer<'a> {
                 },
             }
         }
-        panic!("not sure why this happened")
+        Err(anyhow!("unknown lexer error"))
     }
 
     #[inline]

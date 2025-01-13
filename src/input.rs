@@ -3,6 +3,7 @@ use std::io::{StdoutLock, Write, stdin, stdout};
 use anyhow::{Result, anyhow};
 use termion::clear;
 use termion::cursor;
+use termion::cursor::DetectCursorPos;
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::{IntoRawMode, RawTerminal};
@@ -15,6 +16,7 @@ pub struct Reader<'a> {
     shell: Shell,
     term: RawTerminal<StdoutLock<'a>>,
     buffer: String,
+    cursor: usize,
 }
 
 impl<'a> Reader<'a> {
@@ -28,11 +30,12 @@ impl<'a> Reader<'a> {
             shell,
             term,
             buffer,
+            cursor: 0,
         })
     }
 
     pub fn run(&mut self) -> Result<()> {
-        write!(self.term, "{DEFAULT_PROMPT}")?;
+        write!(self.term, "{DEFAULT_PROMPT}{}", cursor::SteadyBar)?;
         self.term.flush()?;
         
         for key in stdin().keys() {
@@ -44,33 +47,44 @@ impl<'a> Reader<'a> {
                             self.term.suspend_raw_mode().ok();
                             print!("\r\n");
                             if let Err(err) = shell::run(&self.buffer, &mut self.shell) {
-                                print!("{err}\n");
+                                print!("polyshell: {err}\n");
                             }
                             self.buffer.clear();
-                            write!(
-                                self.term,
-                                "{}${}{}\r",
-                                style::Invert,
-                                style::Reset,
-                                " ".repeat(cols as usize - 1),
-                            )?;
+                            self.cursor = 0;
                         }
-                        else {
-                            write!(self.term, "{}\r", " ".repeat(cols as usize))?;
-                        }
+                        write!(
+                            self.term,
+                            "{}${}{}\r",
+                            style::Invert,
+                            style::Reset,
+                            " ".repeat(cols as usize - 1),
+                        )?;
+                        self.term.activate_raw_mode()?;
                         write!(self.term, "{DEFAULT_PROMPT}")?;
                         self.term.flush()?;
                         self.buffer.clear();
-                        self.term.activate_raw_mode()?;
                     },
+                    Key::Ctrl('w') => todo!(),
                     Key::Char(c) => {
-                        self.buffer.push(c);
-                        write!(self.term, "{c}")?;
+                        self.buffer.insert(self.cursor, c);
+                        self.cursor += 1;
+                        self.render_user_input()?;
+                    },
+                    Key::Backspace if self.cursor > 0 => {
+                        self.cursor -= 1;
+                        self.buffer.remove(self.cursor);
+                        self.render_user_input()?;
+                    },
+                    Key::Left if self.cursor > 0 => {
+                        self.cursor -= 1;
+                        write!(self.term, "{}", cursor::Left(1))?;
                         self.term.flush()?;
                     },
-                    Key::Backspace => todo!(),
-                    Key::Left => todo!(),
-                    Key::Right => todo!(),
+                    Key::Right if self.cursor < self.buffer.len() => {
+                        self.cursor += 1;
+                        write!(self.term, "{}", cursor::Right(1))?;
+                        self.term.flush()?;
+                    },
                     _ => {},
                 }
             }
@@ -78,6 +92,25 @@ impl<'a> Reader<'a> {
                 return Err(anyhow!("{}", key.unwrap_err()));
             }
         }
+        Ok(())
+    }
+
+    fn render_user_input(&mut self) -> Result<()> {
+        // TODO rewrite messy function.
+        let mx = DEFAULT_PROMPT.len() as u16 + 1;
+        let cops = self.term.cursor_pos().unwrap();
+        let x = std::cmp::max(mx, mx + self.cursor as u16);
+        write!(
+            self.term,
+            "{}{}{}{}{}{}",
+            cursor::Hide,
+            cursor::Goto(mx, cops.1),
+            clear::AfterCursor,
+            self.buffer,
+            cursor::Show,
+            cursor::Goto(x, cops.1),
+        )?;
+        self.term.flush()?;
         Ok(())
     }
 }

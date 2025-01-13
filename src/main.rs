@@ -7,6 +7,6 @@ use input::Reader;
 
 fn main() -> Result<()> {
     let mut reader = Reader::new()?;
-    reader.run();
+    reader.run()?;
     Ok(())
 }

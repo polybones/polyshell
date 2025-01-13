@@ -84,7 +84,7 @@ impl<'a> Parser<'a> {
                             command: Atom::from(tk_val),
                             args,
                             // FIXME: Temporary implementation; will be fixed later
-                            canonical: !tk_val.starts_with('/'),
+                            canonical: !tk_val.starts_with('/') && !tk_val.starts_with('.'),
                         })));
                     }
                 },
