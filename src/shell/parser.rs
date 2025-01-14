@@ -5,6 +5,7 @@ use super::token::{Kind, Token};
 #[derive(Debug)]
 pub enum Expr {
     Assign(Box<AssignExpr>),
+    Alias(Box<AliasExpr>),
     Command(Box<CommandExpr>),
     Eof,
 }
@@ -14,6 +15,12 @@ pub struct AssignExpr {
     pub modifier: Modifier,
     pub lhs: Atom,
     pub rhs: Atom,
+}
+
+#[derive(Debug)]
+pub struct AliasExpr {
+    pub alias: Atom,
+    pub command: CommandExpr,
 }
 
 #[derive(Debug)]
@@ -57,20 +64,47 @@ impl<'a> Parser<'a> {
                 Kind::StringLiteral => {
                     if let Some(modifier) = self.modifier(&tk) {
                         // TEMP: Will clean up this eventually
-                        let lhs = self.next_token().unwrap();
-                        if lhs.kind != Kind::StringLiteral {
+                        let lhs = self.next_token();
+                        if lhs.is_none() || lhs.as_ref().unwrap().kind != Kind::StringLiteral {
                             return Err(anyhow!("expected 'StringLiteral' after '{:?}'", modifier));
                         }
-                        if self.next_token().unwrap().kind != Kind::Eq {
-                            return Err(anyhow!("expected '=' after '{}'", self.token_value(&lhs)));
+                        if self.next_token().is_none() {
+                            return Err(anyhow!("expected '=' after '{}'", self.token_value(&lhs.unwrap())));
                         }
+                        if let Some(tk) = self.next_token() {
+                            if tk.kind != Kind::StringLiteral {
+                                return Err(anyhow!("expected string literal"));
+                            }
+                            
+                            let mut args = Vec::new();
+                            while let Some(tk) = self.next_token() {
+                                if tk.kind == Kind::EndStmt || tk.kind == Kind::Eof {
+                                    break
+                                }
+                                else {
+                                    args.push(&self.source[tk.start..tk.end]);
+                                }
+                            }
 
-                        let rhs = self.next_token().unwrap();
-                        return Ok(Expr::Assign(Box::new(AssignExpr {
-                            modifier,
-                            lhs: Atom::from(self.token_value(&lhs)),
-                            rhs: Atom::from(self.token_value(&rhs)),
-                        })));
+                            return Ok(match modifier {
+                                Modifier::Alias => {
+                                    Expr::Alias(Box::new(AliasExpr {
+                                        alias: Atom::from(self.token_value(&lhs.unwrap())),
+                                        command: CommandExpr {
+                                            args: args.iter().map(|arg| Atom::from(*arg)).collect(),
+                                            command: Atom::from(self.token_value(&tk)),
+                                            canonical: is_canonical(self.token_value(&tk)),
+                                        },
+                                    }))
+                                },
+                                _ => Expr::Assign(Box::new(AssignExpr {
+                                    modifier,
+                                    lhs: Atom::from(self.token_value(&lhs.unwrap())),
+                                    rhs: Atom::from(args.into_iter().collect::<String>()),
+                                })),
+                            });
+                        }
+                        return Err(anyhow!("none"));
                     }
                     else {
                         let mut args: Vec<Atom> = Vec::new();
@@ -83,8 +117,7 @@ impl<'a> Parser<'a> {
                         return Ok(Expr::Command(Box::new(CommandExpr {
                             command: Atom::from(tk_val),
                             args,
-                            // FIXME: Temporary implementation; will be fixed later
-                            canonical: !tk_val.starts_with('/') && !tk_val.starts_with('.'),
+                            canonical: is_canonical(tk_val),
                         })));
                     }
                 },
@@ -121,4 +154,10 @@ impl<'a> Parser<'a> {
             _ => None,
         }
     }
+}
+
+#[inline]
+fn is_canonical(path: &str) -> bool {
+    // FIXME: Temporary implementation; will be fixed later
+    !path.starts_with('/') && !path.starts_with('.')
 }

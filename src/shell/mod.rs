@@ -12,7 +12,7 @@ use string_cache::DefaultAtom as Atom;
 
 #[derive(Default)]
 pub struct Shell {
-    pub aliases: HashMap<Atom, Atom>,
+    pub aliases: HashMap<Atom, parser::CommandExpr>,
     pub variables: HashMap<Atom, Atom>,
     pub path_table: PathTable,
 }

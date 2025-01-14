@@ -95,7 +95,7 @@ impl<'a> Lexer<'a> {
                     let start = self.cursor;
                     self.cursor += 1;
                     while let Some(c) = self.peek() {
-                        if c == ' ' || c == '\n' || c == ';' || c == '=' {
+                        if c == ' ' || c == '\n' || c == ';' {
                             break
                         }
                         else {

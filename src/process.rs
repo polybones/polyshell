@@ -20,6 +20,8 @@ pub fn exec_external(path: CString, args: Vec<CString>) -> i32 {
         .chain(iter::once(ptr::null()))
         .collect();
 
+    // TODO: Get 'ERRNO' error message data and return
+    // it as a proper Rust error
     match unsafe { fork() } {
         0 => {
             unsafe {

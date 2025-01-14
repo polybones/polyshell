@@ -8,7 +8,6 @@ pub struct Token {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
     StringLiteral,
-    Use,
     Eq,
     EqCmp,
     EndStmt,
